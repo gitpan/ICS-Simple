@@ -14,11 +14,11 @@ ICS::Simple - Simple interface to CyberSource ICS2
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
@@ -672,6 +672,8 @@ $ICS::Simple::offerAttrMap = {  # not case-sens on the key-side
   count               => 'quantity',
   qty                 => 'quantity',
   quantity            => 'quantity',
+  tax                 => 'tax_amount',
+  taxamount           => 'tax_amount',
 };
 
 $ICS::Simple::grammarMap = {
@@ -807,12 +809,12 @@ $ICS::Simple::errorMap = {
 
 $ICS::Simple::vitalErrorMap = {
   01                  => {
-                            action        => 'call',
+                            action        => 'decline',
                             note          => 'Refer to Issuer',
                             description   => 'Please call your card issuer.',
                          },
   02                  => {
-                            action        => 'call',
+                            action        => 'decline',
                             note          => 'Refer to Issuer - Special Condition',
                             description   => 'Please call your card issuer.',
                          },
@@ -822,7 +824,7 @@ $ICS::Simple::vitalErrorMap = {
                             description   => 'Please call customer service to complete order.',
                          },
   04                  => {
-                            action        => 'holdcard',
+                            action        => 'decline',
                             note          => 'Pick up card',
                             description   => 'Authorization has been declined.',
                          },
@@ -837,7 +839,7 @@ $ICS::Simple::vitalErrorMap = {
                             description   => 'Please call customer service to complete order.',
                          },
   07                  => {
-                            action        => 'holdcard',
+                            action        => 'decline',
                             note          => 'Pick up card - Special Condition',
                             description   => 'Authorization has been declined.',
                          },
@@ -867,7 +869,7 @@ $ICS::Simple::vitalErrorMap = {
                             description   => 'Authorization has been declined.',
                          },
   28                  => {
-                            action        => 'unavailable',
+                            action        => 'error',
                             note          => 'File is temporarily unavailable',
                             description   => 'Please call customer service to complete order.',
                          },
@@ -877,12 +879,12 @@ $ICS::Simple::vitalErrorMap = {
                             description   => 'Invalid card number.',
                          },
   41                  => {
-                            action        => 'holdcard',
+                            action        => 'decline',
                             note          => 'Pick up card - Lost',
                             description   => 'Authorization has been declined.',
                          },
   43                  => {
-                            action        => 'holdcard',
+                            action        => 'decline',
                             note          => 'Pick up card - Stolen',
                             description   => 'Authorization has been declined.',
                          },
@@ -912,12 +914,12 @@ $ICS::Simple::vitalErrorMap = {
                             description   => 'Incorrect Card/PIN combination.', # is it safe to let them know the PIN is wrong?
                          },
   57                  => {
-                            action        => 'servnotallowed',
+                            action        => 'decline',
                             note          => 'Transaction Disallowed - Card',
                             description   => 'Authorization has been declined.',
                          },
   58                  => {
-                            action        => 'servnotallowed',
+                            action        => 'decline',
                             note          => 'Transaction Disallowed - Term',
                             description   => 'Authorization has been declined.',
                          },
