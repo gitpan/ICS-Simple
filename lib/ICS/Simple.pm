@@ -14,11 +14,11 @@ ICS::Simple - Simple interface to CyberSource ICS2
 
 =head1 VERSION
 
-Version 0.02
+Version 0.04
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.04';
 
 =head1 SYNOPSIS
 
@@ -99,6 +99,7 @@ sub new {
   }
   $self->{server_mode} ||= 'test'; # default to test mode
   $self->{icspath} ||= '/opt/ics';
+  $self->{cvv_accepted} ||=  $ICS::Simple::cvvAcceptedDefault;
   return $self;
 }
 
@@ -126,7 +127,7 @@ sub requestIcs {
   $request->{server_mode} ||= $self->{server_mode};
   $request->{server_host} ||= $self->{server_host};
   unless ($request->{server_host}) {
-    if ($request->{mode} =~ m|^\s*prod\s*$|i) {
+    if ($request->{server_mode} =~ m|^\s*prod|i) {
       $request->{server_host} = 'ics2.ic3.com';
       $request->{server_port} = '80';
     } else {
@@ -136,7 +137,7 @@ sub requestIcs {
   }
   $request->{currency} ||= 'USD';
   $request->{merchant_id} ||= $self->{merchant_id};
-  $request->{decline_avs_flags} ||= $self->{decline_avs_flags} || "A,C,E,G,I,N,R,S,U,W,1,2";
+  $request->{decline_avs_flags} ||= $self->{decline_avs_flags} || $ICS::Simple::avsRejectedDefault;
   
   my $response = {};
   %{$response} = ICS::ics_send(%{$request});
@@ -145,6 +146,7 @@ sub requestIcs {
   $response->{success} = ($response->{ics_rcode} == 1 ? 1 : 0);
   if (!$response->{success}) {
     $response->{rmsg} = $ICS::Simple::vitalErrorMap->{$response->{ics_rcode}} || $response->{rmsg};
+    $response->{auth_auth_error} = $ICS::Simple::vitalErrorMap->{$response->{auth_auth_response}} || $ICS::Simple::vitalErrorMap->{0};
   }
   
   my $error = {};
@@ -243,7 +245,6 @@ sub request { # convert the request into ICS format and then send it to requestI
   for my $key (keys(%{$request})) {
     $self->set($key, $request->{$key}, $item, 1);
   }
-
  
   @{$item->{x_items}} = (ref($item->{x_items}) eq 'ARRAY' ? @{$item->{x_items}} : [$item->{x_items}]);
   
@@ -280,7 +281,7 @@ sub request { # convert the request into ICS format and then send it to requestI
   $self->_constructOffers('x_items', $item);
   
   $item->{ics_applications} = $self->_resolveApp($item->{ics_applications});
-  $item->{decline_avs_flags} = $item->{decline_avs_flags} || $self->{decline_avs_flags} || 'A,C,E,G,I,N,R,S,U,W,1,2';
+  $item->{decline_avs_flags} = $item->{decline_avs_flags} || $self->{decline_avs_flags} || $ICS::Simple::avsRejectedDefault;
   
   return $self->requestIcs($item);
 }
@@ -491,7 +492,8 @@ $ICS::Simple::fieldMap = {  # not case-sens on the key-side
   action                      => 'ics_applications',
   actions                     => 'ics_applications',
   icsapplications             => 'ics_applications',
-  declineavsflags             => 'decline_avs_flags',
+  declineavs                  => 'decline_avs_flags',
+  cvvaccepted                 => 'cvv_accepted',
   firstname                   => 'customer_firstname',
   givenname                   => 'customer_firstname',
   customergivenname           => 'customer_firstname',
@@ -692,6 +694,7 @@ $ICS::Simple::grammarMap = {
                             auth_rcode                        => 'authResponseCode',
                             auth_rmsg                         => 'authResponseMessage',
                             auth_auth_response                => 'authResponse',
+                            auth_auth_error                   => 'authError',
                             auth_auth_amount                  => 'authAmount',
                             auth_auth_code                    => 'authCode',
                             auth_cv_result                    => 'authCvResult',
@@ -722,6 +725,7 @@ $ICS::Simple::grammarMap = {
                             auth_rcode                        => 'AuthResponseCode',
                             auth_rmsg                         => 'AuthResponseMessage',
                             auth_auth_response                => 'AuthResponse',
+                            auth_auth_error                   => 'AuthError',
                             auth_auth_amount                  => 'AuthAmount',
                             auth_auth_code                    => 'AuthCode',
                             auth_cv_result                    => 'AuthCvResult',
@@ -749,281 +753,404 @@ $ICS::Simple::errorMap = {
                             description   => 'System error.',
                             critical      => 1,
                          },
-  etimeout             => {
+  etimeout            => {
                             name          => 'TIMEOUT',
                             description   => 'Communications timeout.  Please wait a few moments, then try again.',
                          },
-  dduplicate             => {
+  dduplicate          => {
                             name          => 'DUPLICATE',
                             description   => 'Duplicate transaction refused.',
                          },
-  dinvalid             => {
+  dinvalid            => {
                             name          => 'INVALIDDATA',
-                            description   => 'Invalid data provided.  Please reenter the necessary data and try again.',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
                          },
-  dinvaliddata             => {
+  dinvaliddata        => {
+                            name          => 'INVALIDDATA',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
+                         },
+  dinvalidcard        => {
                             name          => 'INVALIDCARD',
-                            description   => 'Invalid data provided.  Please reenter the necessary data and try again.',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
                          },
-  dinvalidcard             => {
-                            name          => 'INVALIDCARD',
-                            description   => 'The provided credit card is invalid.  Please use another card and try again.',
-                         },
-  dinvalidaddress             => {
+  dinvalidaddress     => {
                             name          => 'INVALIDADDRESS',
                             description   => 'Invalid address data provided.  Please reenter the necessary data and try again.',
                          },
-  dmissingfield             => {
+  dmissingfield       => {
                             name          => 'MISSINGFIELD',
                             description   => 'Required field data missing.  Please reenter the necessary data and try again.',
                          },
-  drestricted             => {
+  drestricted         => {
                             name          => 'RESTRICTED',
                             description   => 'Unable to process order.',
                          },
-  dcardrefused             => {
+  dcardrefused        => {
                             name          => 'CARDREFUSED',
-                            description   => 'The provided credit card was declined by the bank.  Please use another card and try again.',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
                          },
-  dcall             => {
+  dcall               => {
                             name          => 'CALL',
                             description   => 'Unable to process order.',
                          },
-  dcardexpired             => {
+  dcardexpired        => {
                             name          => 'CARDEXPIRED',
                             description   => 'The provided credit card is expired.  Please use another card and try again.',
                          },
-  davsno             => {
+  davsno              => {
                             name          => 'AVSFAILED',
-                            description   => 'The provided shipping information did not match the information for the card.  Reenter the shipping information and try again.',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
                          },
-  dcv             => {
+  dcv                 => {
                             name          => 'CV',
-                            description   => 'The provided CVV information did not match the information for the card.  Reenter the CVV information and try again.',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
                          },
   dnoauth             => {
                             name          => 'NOAUTH',
                             description   => 'The requested transaction does not match a valid, existing authorization transaction.',
                          },
+  dscore              => {
+                            name          => 'SCORE',
+                            description   => 'Score exceeds limit.',
+                         },
+  dsettings           => {
+                            name          => 'SETTINGS',
+                            description   => 'The provided credit card was declined.  Check your billing address, credit card number, and CVV and try again or use a different card.',
+                         },
+};
+
+$ICS::Simple::cvvAcceptedDefault = 'M,P,U,X,1';
+
+$ICS::Simple::cvvMap = {
+  I                   => {
+                            note          => 'Card verification number failed processor\'s data validation check.',
+                         },
+  M                   => {
+                            note          => 'Card verification number matched.',
+                         },
+  N                   => {
+                            note          => 'Card verification number not matched.',
+                         },
+  P                   => {
+                            note          => 'Card verification number not processed.',
+                         },
+  S                   => {
+                            note          => 'Card verification number is on the card but was not included in the request.',
+                         },
+  U                   => {
+                            note          => 'Card verification is not supported by the issuing bank.',
+                         },
+  X                   => {
+                            note          => 'Card verification is not supported by the card association.',
+                         },
+  1                   => {
+                            note          => 'CyberSource does not support card verification for this processor or card type.',
+                         },
+  2                   => {
+                            note          => 'The processor returned an unrecognized value for the card verification response.',
+                         },
+  3                   => {
+                            note          => 'The processor did not return a card verification result code.',
+                         },
+};
+
+$ICS::Simple::avsRejectedDefault = 'A,C,E,I,N,R,S,U,W,1,2';
+
+$ICS::Simple::avsMap = {
+  A                   => {
+                            note          => 'Street address matches, but both 5-digit ZIP code and 9-digit ZIP code do not match.',
+                         },
+  B                   => {
+                            note          => 'Street address matches, but postal code not verified. Returned only for non-U.S.-issued Visa cards.',
+                         },
+  C                   => {
+                            note          => 'Street address and postal code do not match. Returned only for non U.S.-issued Visa cards.',
+                         },
+  D                   => {
+                            note          => 'Street address and postal code both match. Returned only for non-U.S.-issued Visa cards.',
+                         },
+  E                   => {
+                            note          => 'AVS data is invalid.',
+                         },
+  G                   => {
+                            note          => 'Non-U.S. issuing bank does not support AVS.',
+                         },
+  I                   => {
+                            note          => 'Address information not verified. Returned only for non-U.S.-issued Visa cards.',
+                         },
+  J                   => {
+                            note          => 'Card member name, billing address, and postal code all match. Ship-to information verified and chargeback protection guaranteed through the Fraud Protection Program. This code is returned only if you are signed up to use AAV+ with the American Express Phoenix processor.',
+                         },
+  K                   => {
+                            note          => 'Card member\'s name matches. Both billing address and billing postal code do not match. This code is returned only if you are signed up to use Enhanced AVS or AAV+ with the American Express Phoenix processor.',
+                         },
+  L                   => {
+                            note          => 'Card member\'s name matches. Billing postal code matches, but billing address does not match. This code is returned only if you are signed up to use Enhanced AVS or AAV+ with the American Express Phoenix processor.',
+                         },
+  M                   => {
+                            note          => 'Street address and postal code both match. Returned only for non-U.S.-issued Visa cards.',
+                         },
+  N                   => {
+                            note          => 'Street address and postal code do not match. Returned only for U.S.-issued Visa cards.',
+                         },
+  O                   => {
+                            note          => 'Card member name matches. Billing address matches, but billing postal code does not match. This code is returned only if you are signed up to use Enhanced AVS or AAV+ with the American Express Phoenix processor.',
+                         },
+  P                   => {
+                            note          => 'Postal code matches, but street address not verified. Returned only for non-U.S.-issued Visa cards.',
+                         },
+  Q                   => {
+                            note          => 'Card member name, billing address, and postal code all match. Ship-to information verified but chargeback protection not guaranteed (Standard program). This code is returned only if you are signed up to use AAV+ with the American Express Phoenix processor.',
+                         },
+  R                   => {
+                            note          => 'System unavailable.',
+                         },
+  S                   => {
+                            note          => 'U.S. issuing bank does not support AVS.',
+                         },
+  U                   => {
+                            note          => 'Address information unavailable. Returned if non-U.S. AVS is not available or if the AVS in a U.S. bank is not functioning properly.',
+                         },
+  V                   => {
+                            note          => 'Card member name matches. Both billing address and billing postal code match. This code is returned only if you are signed up to use Enhanced AVS or AAV+ with the American Express Phoenix processor.',
+                         },
+  W                   => {
+                            note          => 'Street address does not match, but 9-digit ZIP code matches.',
+                         },
+  X                   => {
+                            note          => 'Exact match. Street address and 9-digit ZIP code both match.',
+                         },
+  Y                   => {
+                            note          => 'Street address and 5-digit ZIP code both match.',
+                         },
+  Z                   => {
+                            note          => 'Street address does not match, but 5-digit ZIP code matches.',
+                         },
+  1                   => {
+                            note          => 'CyberSource AVS code. AVS is not supported for this processor or card type.',
+                         },
+  2                   => {
+                            note          => 'CyberSource AVS code. The processor returned an unrecognized value for the AVS response.',
+                         },
 };
 
 $ICS::Simple::vitalErrorMap = {
-  01                  => {
+  '01'                => {
                             action        => 'decline',
                             note          => 'Refer to Issuer',
                             description   => 'Please call your card issuer.',
                          },
-  02                  => {
+  '02'                => {
                             action        => 'decline',
                             note          => 'Refer to Issuer - Special Condition',
                             description   => 'Please call your card issuer.',
                          },
-  03                  => {
+  '03'                => {
                             action        => 'error',
                             note          => 'Invalid Merchant ID',
                             description   => 'Please call customer service to complete order.',
                          },
-  04                  => {
+  '04'                => {
                             action        => 'decline',
                             note          => 'Pick up card',
                             description   => 'Authorization has been declined.',
                          },
-  05                  => {
+  '05'                => {
                             action        => 'decline',
                             note          => 'Do Not Honor',
                             description   => 'Authorization has been declined.',
                          },
-  06                  => {
+  '06'                => {
                             action        => 'error',
                             note          => 'General Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  07                  => {
+  '07'                => {
                             action        => 'decline',
                             note          => 'Pick up card - Special Condition',
                             description   => 'Authorization has been declined.',
                          },
-  12                  => {
+  '12'                => {
                             action        => 'error',
                             note          => 'Unknown system error',
                             description   => 'Please call customer service to complete order.',
                          },
-  13                  => {
+  '13'                => {
                             action        => 'error',
                             note          => 'Invalid Amount',
                             description   => 'Invalid amount.',
                          },
-  14                  => {
+  '14'                => {
                             action        => 'error',
                             note          => 'Invalid Card Number',
                             description   => 'Invalid card number.',
                          },
-  15                  => {
+  '15'                => {
                             action        => 'error',
                             note          => 'No such issuer',
                             description   => 'Invalid card number.',
                          },
-  19                  => {
+  '19'                => {
                             action        => 'decline',
                             note          => 'Unknown Decline Error',
                             description   => 'Authorization has been declined.',
                          },
-  28                  => {
+  '28'                => {
                             action        => 'error',
                             note          => 'File is temporarily unavailable',
                             description   => 'Please call customer service to complete order.',
                          },
-  39                  => {
+  '39'                => {
                             action        => 'error',
                             note          => 'Invalid Card Number',
                             description   => 'Invalid card number.',
                          },
-  41                  => {
+  '41'                => {
                             action        => 'decline',
                             note          => 'Pick up card - Lost',
                             description   => 'Authorization has been declined.',
                          },
-  43                  => {
+  '43'                => {
                             action        => 'decline',
                             note          => 'Pick up card - Stolen',
                             description   => 'Authorization has been declined.',
                          },
-  51                  => {
+  '51'                => {
                             action        => 'decline',
                             note          => 'Insufficient Funds',
                             description   => 'Authorization has been declined.',
                          },
-  52                  => {
+  '52'                => {
                             action        => 'error',
                             note          => 'Unknown Card Number Error',
                             description   => 'Invalid Card Number',
                          },
-  53                  => {
+  '53'                => {
                             action        => 'error',
                             note          => 'Unknown Card Number Error',
                             description   => 'Invalid Card Number',
                          },
-  54                  => {
+  '54'                => {
                             action        => 'expired',
                             note          => 'Expired Card',
                             description   => 'Expired card.',
                          },
-  55                  => {
+  '55'                => {
                             action        => 'error',
                             note          => 'Incorrect PIN',
                             description   => 'Incorrect Card/PIN combination.', # is it safe to let them know the PIN is wrong?
                          },
-  57                  => {
+  '57'                => {
                             action        => 'decline',
                             note          => 'Transaction Disallowed - Card',
                             description   => 'Authorization has been declined.',
                          },
-  58                  => {
+  '58'                => {
                             action        => 'decline',
                             note          => 'Transaction Disallowed - Term',
                             description   => 'Authorization has been declined.',
                          },
-  61                  => {
+  '61'                => {
                             action        => 'decline',
                             note          => 'Withdrawal Limit Exceeded',
                             description   => 'Withdrawal limit exceeded.',
                          },
-  62                  => {
+  '62'                => {
                             action        => 'decline',
                             note          => 'Invalid Service Code, Restricted',
                             description   => 'Authorization has been declined.',
                          },
-  63                  => {
+  '63'                => {
                             action        => 'decline',
                             note          => 'Unknown Decline Error',
                             description   => 'Authorization has been declined.',
                          },
-  65                  => {
+  '65'                => {
                             action        => 'decline',
                             note          => 'Activity Limit Exceeded',
                             description   => 'Authorization has been declined.',
                          },
-  75                  => {
+  '75'                => {
                             action        => 'decline',
                             note          => 'PIN Attempts Exceeded',
                             description   => 'Authorization has been declined.',
                          },
-  78                  => {
+  '78'                => {
                             action        => 'error',
                             note          => 'Unknown Invalid Card Number Error',
                             description   => 'Invalid Card Number',
                          },
-  79                  => {
+  '79'                => {
                             action        => 'call',
                             note          => 'Unknown Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  80                  => {
+  '80'                => {
                             action        => 'error',
                             note          => 'Invalid Expiration Date',
                             description   => 'Invalid expiration date.',
                          },
-  82                  => {
+  '82'                => {
                             action        => 'decline',
                             note          => 'Cashback Limit Exceeded',
                             description   => 'Cashback limit exceeded.',
                          },
-  83                  => {
+  '83'                => {
                             action        => 'decline',
                             note          => 'Unknown PIN Verification Error',
                             description   => 'Can not verify PIN.',
                          },
-  86                  => {
+  '86'                => {
                             action        => 'decline',
                             note          => 'Unknown PIN Verification Error',
                             description   => 'Can not verify PIN.',
                          },
-  91                  => {
+  '91'                => {
                             action        => 'unavailable',
                             note          => 'Issuer or switch is unavailable',
                             description   => 'Please call customer service to complete order.',
                          },
-  92                  => {
+  '92'                => {
                             action        => 'call',
                             note          => 'Unknown Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  93                  => {
+  '93'                => {
                             action        => 'decline',
                             note          => 'Violation, Cannot Complete',
                             description   => 'Authorization has been declined.',
                          },
-  96                  => {
+  '96'                => {
                             action        => 'error',
                             note          => 'System Malfunction',
                             description   => 'Please call customer service to complete order.',
                          },
-  EA                  => {
+  'EA'                => {
                             action        => 'error',
                             note          => 'Verification Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  EB                  => {
+  'EB'                => {
                             action        => 'call',
                             note          => 'Unknown Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  EC                  => {
+  'EC'                => {
                             action        => 'error',
                             note          => 'Verification Error',
                             description   => 'Please call customer service to complete order.',
                          },
-  N3                  => {
+  'N3'                => {
                             action        => 'error',
                             note          => 'Cashback Service Not Available',
                             description   => 'Cashback service is not available.',
                          },
-  N4                  => {
+  'N4'                => {
                             action        => 'decline',
                             note          => 'Issuer Withdrawal Limit Exceeded',
                             description   => 'Amount exceeds issuer withdrawal limit.',
                          },
-  N7                  => {
+  'N7'                => {
                             action        => 'error',
                             note          => 'Invalid CVV2 Data Supplied',
                             description   => 'Invalid card security code.', # should we let the enduser know this?
