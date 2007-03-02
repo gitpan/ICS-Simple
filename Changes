@@ -1,5 +1,8 @@
 Revision history for ICS-Simple
 
+0.06    Fri Mar  2 00:38:58 UTC 2007
+          Modified filtering code to prevent credit card information from appearing in failure alert emails.
+
 0.04    Fri Sep 29 22:40:05 UTC 2006
           Modified error messages to be more informative or otherwise helpful.
           Added vitalErrorMap for auth_auth_response code which is reported as auth_auth_error (raw).

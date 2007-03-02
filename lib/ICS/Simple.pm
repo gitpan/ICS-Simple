@@ -14,11 +14,11 @@ ICS::Simple - Simple interface to CyberSource ICS2
 
 =head1 VERSION
 
-Version 0.04
+Version 0.06
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.06';
 
 =head1 SYNOPSIS
 
@@ -402,8 +402,8 @@ sub _sendError {
   );
   
   # filter things before we send it out
-  $bodyContent =~ s|(customer_cc_number.*?'\d{4})(\d+)(\d{4}')|$1.('x' x length($2)).$3|ge; # keep the first/last 4 digits, replace all else
-  $bodyContent =~ s|(customer_cc_cv_number.*?')(\d+)(')|$1.('x' x length($2)).$3|ge; # replace all the digits
+  $bodyContent =~ s|(customer_cc_number'.*?'[^']{4})([^']+?)([^']{4}')|$1.('x' x length($2)).$3|ge; # keep the first/last 4 characters, replace all else
+  $bodyContent =~ s|(customer_cc_cv_number'.*?')([^']+?)(')|$1.('x' x length($2)).$3|ge; # replace all the characters
   
   print $body $bodyContent;
   $body->close;
